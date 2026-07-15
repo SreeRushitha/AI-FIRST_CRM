@@ -72,7 +72,12 @@ def log_interaction(state: GraphState):
     prompt = f"""
     You are an AI CRM assistant.
 
-    Extract the following fields from the conversation.
+    Extract only information explicitly mentioned by the user.
+
+    If a field is not provided, return an empty string.
+
+    Do not guess.
+    Do not invent names, dates, products or locations.
 
     Return ONLY valid JSON.
 
@@ -199,7 +204,10 @@ def followup_recommendation(state:GraphState):
     Interaction:
     {state["user_input"]}
 
-    Return only JSON.
+    Return ONLY valid JSON.
+    Do not use markdown.
+    Do not wrap the response in ```json.
+    Do not add explanations.
 
     {{
         "followup":[]
@@ -258,34 +266,220 @@ def product_recommendation(state:GraphState):
     }
 
     return state
-def route_tool(state:GraphState):
+def sentiment_analysis(state: GraphState):
+
+    prompt = f"""
+    You are a pharmaceutical CRM assistant.
+
+    Analyze the sentiment of the following interaction.
+
+    Classify it as one of:
+    - Positive
+    - Neutral
+    - Negative
+
+    Also provide a short reason.
+
+    Interaction:
+    {state["user_input"]}
+
+    Return ONLY valid JSON.
+
+    {{
+        "sentiment":"",
+        "reason":""
+    }}
+    """
+
+    result = llm.invoke(prompt)
+
+    try:
+
+        content = result.content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+
+    except:
+
+        data = {
+            "sentiment":"Unknown",
+            "reason":result.content
+        }
+
+    state["response"] = {
+        "tool":"sentiment_analysis",
+        "data":data
+    }
+
+    return state
+def interaction_summary(state: GraphState):
+
+    prompt = f"""
+    You are a pharmaceutical CRM assistant.
+
+    Summarize the following healthcare professional interaction in 3-4 concise sentences.
+
+    Interaction:
+    {state["user_input"]}
+
+    Return ONLY valid JSON.
+
+    {{
+        "summary":""
+    }}
+    """
+
+    result = llm.invoke(prompt)
+
+    try:
+
+        content = result.content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+
+    except:
+
+        data = {
+            "summary": result.content
+        }
+
+    state["response"] = {
+        "tool":"interaction_summary",
+        "data":data
+    }
+
+    return state
+def doctor_insights(state: GraphState):
+
+    prompt = f"""
+    You are a pharmaceutical CRM assistant.
+
+    Analyze the interaction and identify important insights about the doctor.
+
+    Return ONLY valid JSON.
+
+    {{
+        "specialization":"",
+        "interests":[],
+        "concerns":[]
+    }}
+
+    Interaction:
+    {state["user_input"]}
+    """
+
+    result = llm.invoke(prompt)
+
+    try:
+
+        content = result.content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+
+    except:
+
+        data = {
+            "specialization":"",
+            "interests":[],
+            "concerns":[]
+        }
+
+    state["response"] = {
+        "tool":"doctor_insights",
+        "data":data
+    }
+
+    return state
+def meeting_preparation(state: GraphState):
+
+    prompt = f"""
+    You are a pharmaceutical CRM assistant.
+
+    Based on this interaction, suggest how the medical representative should prepare for the next meeting.
+
+    Return ONLY valid JSON.
+
+    {{
+        "preparation":[]
+    }}
+
+    Interaction:
+    {state["user_input"]}
+    """
+
+    result = llm.invoke(prompt)
+
+    try:
+
+        content = result.content.replace("```json", "").replace("```", "").strip()
+        data = json.loads(content)
+
+    except:
+
+        data = {
+            "preparation":[result.content]
+        }
+
+    state["response"] = {
+        "tool":"meeting_preparation",
+        "data":data
+    }
+
+    return state
+
+def route_tool(state: GraphState):
 
     prompt = f"""
     You are an AI router.
 
-    Select exactly one tool.
+    Choose ONLY ONE tool based on the user's request.
+
+    Available tools:
 
     log_interaction
     followup_recommendation
     product_recommendation
+    sentiment_analysis
+    interaction_summary
+    doctor_insights
+    meeting_preparation
+
+    Use:
+    - log_interaction -> when the user wants to log or record an interaction.
+    - followup_recommendation -> when the user asks for follow-up actions.
+    - product_recommendation -> when the user asks for products, brochures, samples or clinical materials.
+    - sentiment_analysis -> when the user asks to analyze sentiment.
+    - interaction_summary -> when the user asks to summarize the interaction.
+    - doctor_insights -> when the user asks for doctor insights, interests or concerns.
+    - meeting_preparation -> when the user asks how to prepare for the next meeting.
 
     User:
     {state["user_input"]}
 
-    Return only one tool name.
+    Return ONLY one tool name.
     """
 
     tool = llm.invoke(prompt).content.strip().lower()
 
     if "followup" in tool:
         state["tool"] = "followup_recommendation"
+
     elif "product" in tool:
         state["tool"] = "product_recommendation"
+
+    elif "sentiment" in tool:
+        state["tool"] = "sentiment_analysis"
+
+    elif "summary" in tool:
+        state["tool"] = "interaction_summary"
+
+    elif "insight" in tool:
+        state["tool"] = "doctor_insights"
+
+    elif "meeting" in tool or "preparation" in tool:
+        state["tool"] = "meeting_preparation"
+
     else:
         state["tool"] = "log_interaction"
 
     return state
-
 
 def tool_executor(state:GraphState):
 
@@ -297,6 +491,18 @@ def tool_executor(state:GraphState):
 
     if state["tool"] == "product_recommendation":
         return product_recommendation(state)
+    
+    if state["tool"] == "sentiment_analysis":
+        return sentiment_analysis(state)
+    
+    if state["tool"] == "interaction_summary":
+        return interaction_summary(state)
+
+    if state["tool"] == "doctor_insights":
+        return doctor_insights(state)
+
+    if state["tool"] == "meeting_preparation":
+        return meeting_preparation(state)
 
     return state
 
@@ -379,6 +585,9 @@ def interaction(interaction_id:int):
         "outcome":interaction.outcome,
         "followup":interaction.followup
     }
+
+
+
 
 
 @app.post("/log")

@@ -71,7 +71,7 @@ function App() {
       />
 
       <button onClick={sendChat}>
-        Ask AI
+        Run AI Agent
       </button>
 
       <button onClick={logInteraction}>
